@@ -1,0 +1,614 @@
+CAUSA: El conector de SharePoint a veces usa nombres de
+parámetros diferentes al nombre interno de la columna.
+El único modo seguro de obtener el nombre correcto es
+DEJAR QUE POWER AUTOMATE LO GENERE usando la interfaz visual.
+
+SOLUCIÓN: Eliminar "Crear elemento" y "Actualizar elemento"
+y recrearlos desde la interfaz visual, usando CONTENIDO
+DINÁMICO (no expresiones fx) para llenar los campos.
+
+ESTO TAMBIÉN ARREGLA:
+- Los duplicados (porque el filtro encontrará coincidencias)
+- Los registros Inactivos (porque la lógica upsert funcionará)
+
+ANTES DE EMPEZAR:
+1. Ve a SharePoint → lista DBPLANIFICACION
+2. Selecciona TODOS los elementos
+3. Elimínalos todos (están duplicados y mal)
+4. También vacía la papelera de reciclaje
+
+
+================================================================
+ FLUJO DE CARGA — TODOS LOS PASOS DETALLADOS
+================================================================
+
+
+────────────────────────────────────────
+PASO 1: Cuando se crea un archivo (solo propiedades)
+────────────────────────────────────────
+Abre el trigger y verifica:
+
+Campo                      Valor
+─────────────────────────  ──────────────────────────────
+Dirección del sitio        TOMATE_CICLO_LARGO - https://intecapedu.sharepoint.com/sites/TOMATE
+                           (seleccionar del desplegable)
+Nombre de la biblioteca    DBSPA
+                           (seleccionar del desplegable)
+
+Clic en "Mostrar todo" o "Parámetros avanzados":
+
+Carpeta                    /DBSPA/Carga
+                           (usar el ícono de carpeta para navegar, o escribir)
+
+
+────────────────────────────────────────
+PASO 2: Inicializar variable
+────────────────────────────────────────
+Campo     Valor
+────────  ─────────────────────────
+Nombre    varHoraInicio
+Tipo      Cadena (String)
+Valor     Clic en el campo → clic en pestaña "Expresión" (fx)
+          → escribir: utcNow()
+          → clic en "Aceptar"
+          Aparecerá una pastilla verde en el campo.
+
+
+────────────────────────────────────────
+PASO 2.5: Retraso
+────────────────────────────────────────
+Si ya existe, dejarlo. Si no, agregarlo entre paso 2 y paso 3.
+
+Campo      Valor
+─────────  ─────
+Recuento   15
+Unidad     Segundo
+
+
+────────────────────────────────────────
+PASO 3: Crear tabla
+────────────────────────────────────────
+Campo                       Valor
+──────────────────────────  ─────────────────────────
+Ubicación                   https://intecapedu.sharepoint.com/sites/TOMATE
+                            (seleccionar del desplegable)
+Biblioteca de documentos    DBSPA
+                            (seleccionar del desplegable)
+Archivo                     Clic en el campo → clic en "Contenido dinámico"
+                            → buscar sección "Cuando se crea un archivo"
+                            → seleccionar "Identificador"
+                            (dice "{Identifier}" o "Identificador")
+
+Rango de tabla              A1:K10000
+
+Clic en "Mostrar todo":
+
+Nombre de tabla             TablaCarga
+Nombres de columnas         Sí
+
+
+────────────────────────────────────────
+PASO 4: Enumerar las filas de una tabla
+────────────────────────────────────────
+Campo                       Valor
+──────────────────────────  ─────────────────────────
+Ubicación                   https://intecapedu.sharepoint.com/sites/TOMATE
+                            (seleccionar del desplegable)
+Biblioteca de documentos    DBSPA
+                            (seleccionar del desplegable)
+Archivo                     Clic en el campo → "Contenido dinámico"
+                            → sección "Cuando se crea un archivo"
+                            → seleccionar "Identificador"
+Tabla                       TablaCarga
+                            (escribir directamente)
+
+
+────────────────────────────────────────
+PASO 5: Aplicar a cada uno
+────────────────────────────────────────
+Campo                                    Valor
+───────────────────────────────────────  ─────────────────
+Seleccionar una salida de pasos previos Clic en el campo → "Contenido dinámico"
+                                         → buscar sección "Enumerar las filas de una tabla"
+                                         → seleccionar "value"
+                                         (si no aparece, clic en "Ver más")
+
+Configurar paralelismo:
+  Clic en los 3 puntos (⋯) de "Aplicar a cada uno"
+  → Configuración
+  → Activar "Control de simultaneidad"
+  → Grado de paralelismo: 1
+
+
+────────────────────────────────────────
+PASO 5.1: Condición (dentro del loop)
+────────────────────────────────────────
+Fila 1:
+
+Campo izquierdo   Clic en el campo → "Contenido dinámico"
+                   → buscar sección "Enumerar las filas de una tabla"
+                   → seleccionar "Harvest Inv BID"
+                   
+                   ⚠️ SI NO APARECE "Harvest Inv BID":
+                   Clic en "Ver más" junto a la sección.
+                   Si aún no aparece, usar fx:
+                   items('Aplicar_a_cada_uno')?['Harvest Inv BID']
+                   
+Operador           no es igual a
+
+Campo derecho      DEJARLO COMPLETAMENTE VACÍO
+                   (no escribir nada, ni espacios)
+
+
+────────────────────────────────────────
+PASO 5.2: Obtener elementos (dentro de True)
+────────────────────────────────────────
+Campo                  Valor
+─────────────────────  ──────────────────────────
+Dirección del sitio    TOMATE_CICLO_LARGO
+                       (seleccionar del desplegable)
+Nombre de lista        DBPLANIFICACION
+                       (seleccionar del desplegable)
+
+Clic en "Mostrar todo":
+
+Consulta de filtro     Clic en el campo → pestaña fx (Expresión):
+
+  concat('HarvestInvBID eq ''', items('Aplicar_a_cada_uno')?['Harvest Inv BID'], ''' and SRCPlotBID eq ''', items('Aplicar_a_cada_uno')?['SRC Plot BID'], '''')
+
+                       → Aceptar
+
+Primeros puestos       1
+
+Todo lo demás vacío.
+
+
+════════════════════════════════════════
+PASO 5.3: Condición 1
+════════════════════════════════════════
+Campo izquierdo   Clic en el campo → pestaña fx (Expresión):
+                   length(body('Obtener_elementos')?['value'])
+                   → Aceptar
+
+Operador           es mayor que
+
+Campo derecho      0
+
+
+════════════════════════════════════════
+PASO 5.4a: Actualizar elemento (True de Condición 1)
+════════════════════════════════════════
+★★★ ELIMINAR Y RECREAR DESDE CERO ★★★
+
+1. ELIMINA la acción "Actualizar elemento" actual
+   (clic en 3 puntos → Eliminar)
+
+2. En la rama True de Condición 1, clic en "+ Agregar una acción"
+
+3. Buscar "Actualizar elemento" → seleccionar la de SharePoint
+
+4. Campo "Dirección del sitio" → seleccionar TOMATE_CICLO_LARGO
+
+5. Campo "Nombre de lista" → seleccionar DBPLANIFICACION
+
+6. Power Automate mostrará TODOS los campos de la lista.
+   Verás campos como: Id, Title, SRC Plot BID, Harvest Inv BID,
+   Crop, Field, Set, Plot#, Sub-Row, Gen, Target Seed Amount,
+   Next Cycle Priority, Greenhouse, Produced Amount, Percentage,
+   Comments, Status, Fecha, Cosecha, FechaCarga, Estado
+
+7. LLENAR CADA CAMPO ASÍ:
+
+   ┌──────────────────────┬───────────────────────────────────┐
+   │ CAMPO EN PA          │ QUÉ HACER                         │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Id                   │ fx → escribir:                     │
+   │                      │ first(body('Obtener_elementos')    │
+   │                      │ ?['value'])?['ID']                 │
+   │                      │ → Aceptar                          │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Title                │ Contenido dinámico → buscar en     │
+   │                      │ "Enumerar las filas de una tabla"  │
+   │                      │ → SRC Plot BID                     │
+   │                      │ (Si no aparece: fx →               │
+   │                      │ items('Aplicar_a_cada_uno')        │
+   │                      │ ?['SRC Plot BID'] )                │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ SRC Plot BID         │ Contenido dinámico → buscar en     │
+   │ (como aparezca       │ "Enumerar las filas de una tabla"  │
+   │ en la interfaz)      │ → SRC Plot BID                     │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Harvest Inv BID      │ Contenido dinámico → buscar en     │
+   │                      │ "Enumerar las filas de una tabla"  │
+   │                      │ → Harvest Inv BID                  │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Crop                 │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Crop        │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Field                │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Field       │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Set                  │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Set         │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Plot#                │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Plot#       │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Sub-Row              │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Sub-Row     │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Gen                  │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Gen         │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Target Seed Amount   │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" →             │
+   │                      │ Target Seed Amount                 │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Next Cycle Priority  │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" →             │
+   │                      │ Next Cycle Priority                │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Greenhouse           │ Contenido dinámico →               │
+   │                      │ "Enumerar las filas" → Greenhouse  │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ FechaCarga           │ fx → variables('varHoraInicio')    │
+   │                      │ → Aceptar                          │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Estado Value         │ Escribir directamente: Activo      │
+   ├──────────────────────┼───────────────────────────────────┤
+   │ Produced Amount      │ VACÍO (no tocar)                   │
+   │ Percentage           │ VACÍO (no tocar)                   │
+   │ Comments             │ VACÍO (no tocar)                   │
+   │ Status               │ VACÍO (no tocar)                   │
+   │ Fecha                │ VACÍO (no tocar)                   │
+   │ Cosecha              │ VACÍO (no tocar)                   │
+   └──────────────────────┴───────────────────────────────────┘
+
+⚠️ IMPORTANTE SOBRE CONTENIDO DINÁMICO:
+   Cuando haces clic en un campo y abres "Contenido dinámico",
+   busca la sección "Enumerar las filas de una tabla".
+   Si no ves las columnas (SRC Plot BID, Crop, etc.),
+   haz clic en "Ver más" junto a esa sección.
+   
+   Si TODAVÍA no aparecen, es porque Power Automate no
+   puede resolver los nombres dinámicamente. En ese caso
+   usa fx con: items('Aplicar_a_cada_uno')?['NOMBRE COLUMNA']
+
+⚠️ DESPUÉS DE LLENAR TODOS LOS CAMPOS:
+   Haz clic en "Vista de código" de esta acción.
+   Busca el parámetro que corresponde a SRC Plot BID.
+   Anota cómo se llama (ej: "item/SRC_x0020_Plot_x0020_BID"
+   o "item/SRCPlotBID" o lo que sea).
+   Este es el nombre REAL que el conector usa.
+
+
+════════════════════════════════════════
+PASO 5.4b: Crear elemento (False de Condición 1)
+════════════════════════════════════════
+★★★ ELIMINAR Y RECREAR DESDE CERO ★★★
+
+Mismo proceso que 5.4a pero sin el campo Id:
+
+1. ELIMINA la acción "Crear elemento" actual
+2. Agrega nueva "Crear elemento" (SharePoint)
+3. Selecciona sitio TOMATE_CICLO_LARGO
+4. Selecciona lista DBPLANIFICACION
+5. Llena TODOS los campos IGUAL que en 5.4a
+   EXCEPTO "Id" (que no existe en Crear)
+
+   Title               → SRC Plot BID (contenido dinámico)
+   SRC Plot BID        → SRC Plot BID (contenido dinámico)
+   Harvest Inv BID     → Harvest Inv BID (contenido dinámico)
+   Crop                → Crop
+   Field               → Field
+   Set                 → Set
+   Plot#               → Plot#
+   Sub-Row             → Sub-Row
+   Gen                 → Gen
+   Target Seed Amount  → Target Seed Amount
+   Next Cycle Priority → Next Cycle Priority
+   Greenhouse          → Greenhouse
+   FechaCarga          → fx → variables('varHoraInicio')
+   Estado Value        → Activo
+
+   Todo lo demás → VACÍO
+
+
+════════════════════════════════════════
+PASO 6: Obtener elementos 1 (FUERA del loop)
+════════════════════════════════════════
+Este paso va DESPUÉS de que termine "Aplicar a cada uno".
+Clic en + Nuevo paso DEBAJO del bloque del loop.
+
+Campo                  Valor
+─────────────────────  ──────────────────────────
+Dirección del sitio    TOMATE_CICLO_LARGO
+Nombre de lista        DBPLANIFICACION
+
+Clic en "Mostrar todo":
+
+Consulta de filtro     fx → escribir:
+
+  concat('FechaCarga lt ''', variables('varHoraInicio'), ''' and Estado eq ''Activo''')
+
+                       → Aceptar
+
+Primeros puestos       5000
+
+
+════════════════════════════════════════
+PASO 7: Aplicar a cada uno 1
+════════════════════════════════════════
+Seleccionar una salida → Contenido dinámico →
+  buscar sección "Obtener elementos 1" → seleccionar "value"
+
+  Si no aparece, usar fx:
+  body('Obtener_elementos_1')?['value']
+
+
+════════════════════════════════════════
+PASO 7.1: Actualizar elemento 1 (dentro del loop)
+════════════════════════════════════════
+Campo                  Valor
+─────────────────────  ──────────────────────────
+Dirección del sitio    TOMATE_CICLO_LARGO
+Nombre de lista        DBPLANIFICACION
+Id                     Contenido dinámico → buscar en
+                       "Obtener elementos 1" → ID
+                       
+                       ⚠️ Asegúrate de seleccionar el ID
+                       de "Obtener elementos 1", NO de
+                       "Obtener elementos" (sin el 1).
+                       
+                       Si no aparece, usar fx:
+                       items('Aplicar_a_cada_uno_1')?['ID']
+
+Estado Value           Escribir: Inactivo
+
+Todos los demás campos → VACÍOS
+
+
+════════════════════════════════════════
+PASO 8: Mover el archivo
+════════════════════════════════════════
+★★★ ELIMINAR EL FOR EACH ★★★
+
+Tu flujo tiene un "For each" al final con "Mover el archivo"
+dentro. ESTO ESTÁ MAL. Debes corregirlo:
+
+1. Abre el bloque "For each" (el último del flujo)
+2. ELIMINA todo el bloque "For each" completo
+   (clic en 3 puntos del For each → Eliminar)
+3. Clic en + Nuevo paso después de "Aplicar a cada uno 1"
+4. Buscar "Mover archivo" (SharePoint)
+
+Campo                             Valor
+──────────────────────────────── ──────────────────────────
+Dirección del sitio actual        TOMATE_CICLO_LARGO
+Archivo de origen                 Contenido dinámico →
+                                  "Cuando se crea un archivo"
+                                  → Identificador
+Dirección del sitio de destino    TOMATE_CICLO_LARGO
+Carpeta de destino                /DBSPA/Procesados
+Si existe otro archivo            Reemplazar
+
+
+================================================================
+ FLUJO DE DESCARGA EN EXCEL (.xlsx) — TODOS LOS PASOS
+================================================================
+
+Nombre del flujo: FlujoDescargarExcel
+Tipo: Flujo de nube instantáneo
+Trigger: Cuando Power Apps llame a un flujo (V2)
+
+
+────────────────────────────────────────
+PASO D1: Trigger
+────────────────────────────────────────
+Ya lo tienes. Verificar:
+
+jsonDatos → tipo Texto
+
+
+────────────────────────────────────────
+PASO D2: Análisis del archivo JSON
+────────────────────────────────────────
+Ya lo tienes. Verificar:
+
+Contenido → fx: json(triggerBody()['text'])
+Esquema → el que ya tienes (está correcto)
+
+
+────────────────────────────────────────
+PASO D3: Crear tabla CSV
+────────────────────────────────────────
+1. + Nuevo paso → buscar "Crear tabla CSV"
+   (Operaciones de datos → Crear tabla CSV)
+
+Campo    Valor
+───────  ──────────────────────────────
+De       Contenido dinámico → buscar en
+         "Análisis del archivo JSON" → "Cuerpo" (Body)
+
+         Si no aparece, fx:
+         body('An_lisis_del_archivo_JSON')
+
+Columnas Automáticas
+
+
+────────────────────────────────────────
+PASO D4: Componer (para convertir CSV a Excel)
+────────────────────────────────────────
+1. + Nuevo paso → buscar "Componer"
+   (Operaciones de datos → Componer)
+
+Entradas → fx → escribir:
+
+base64(body('Crear_tabla_CSV'))
+
+→ Aceptar
+
+⚠️ Si el nombre de la acción es diferente, ajústalo.
+   Por ejemplo si se llama "Crear_tabla_CSV" usa ese nombre.
+
+
+────────────────────────────────────────
+PASO D5: Crear archivo (SharePoint)
+────────────────────────────────────────
+1. + Nuevo paso → buscar "Crear archivo" (SharePoint)
+
+Campo                    Valor
+───────────────────────  ──────────────────────────
+Dirección del sitio      TOMATE_CICLO_LARGO
+Ruta de la carpeta       /DBSPA/Export
+
+Nombre de archivo        fx → escribir:
+
+  concat('Exportacion_', formatDateTime(utcNow(), 'yyyyMMdd_HHmmss'), '.xlsx')
+
+                         → Aceptar
+
+Contenido del archivo    Contenido dinámico → buscar en
+                         "Crear tabla CSV" → "Resultado"
+
+⚠️ La carpeta /DBSPA/Export debe existir en SharePoint.
+
+⚠️ NOTA: El archivo se crea como .xlsx pero internamente
+   contiene datos CSV. Excel lo abre correctamente, puede
+   mostrar un aviso de "formato diferente" que se acepta
+   con Sí y el archivo abre normal con todos los datos.
+
+   Esta es la única forma de crear un .xlsx sin conectores
+   premium en Power Automate.
+
+
+────────────────────────────────────────
+PASO D6: Responder a PowerApps
+────────────────────────────────────────
+1. + Nuevo paso → buscar "Responder a una aplicación de
+   PowerApps o un flujo"
+
+2. Clic en "+ Agregar una salida"
+3. Seleccionar "Texto"
+
+Campo    Valor
+───────  ──────────────────────────────
+Nombre   enlacearchivo
+Valor    Contenido dinámico → buscar en
+         "Crear archivo" → "Vínculo" (Link)
+
+         Si no aparece, fx:
+         outputs('Crear_archivo')?['body/{Link}']
+
+
+────────────────────────────────────────
+PASO D7: Guardar el flujo
+────────────────────────────────────────
+Clic en "Guardar".
+
+
+================================================================
+ POWER APPS — CÓDIGO DEL BOTÓN DE DESCARGA
+================================================================
+
+1. Seleccionar Icon3 (Download)
+2. Barra superior → Acción → Power Automate
+3. Buscar "FlujoDescargarExcel" → Agregar
+4. Pegar este código en la propiedad OnSelect:
+
+══════════ INICIO DEL CÓDIGO ══════════
+
+ClearCollect(
+    colExportar;
+    AddColumns(
+        Filter(
+            DBPLANIFICACION;
+            (
+                IsBlank(txtBuscador.Value) ||
+                StartsWith('SRC Plot BID'; txtBuscador.Value) ||
+                StartsWith('Harvest Inv BID'; txtBuscador.Value) ||
+                StartsWith(Crop; txtBuscador.Value) ||
+                StartsWith(Field; txtBuscador.Value) ||
+                StartsWith(Set; txtBuscador.Value) ||
+                StartsWith(Greenhouse; txtBuscador.Value) ||
+                StartsWith('Plot#'; txtBuscador.Value)
+            )
+            &&
+            (
+                IsBlank(Familia1.Selected.Value) ||
+                Familia1.Selected.Value = "All" ||
+                (Familia1.Selected.Value = "Solanaceae" &&
+                 (Crop = "Tomato" || Crop = "Pepper")) ||
+                (Familia1.Selected.Value = "Cucurbits" &&
+                 (Crop = "Melon" || Crop = "Watermelon" ||
+                  Crop = "Cucumber"))
+            )
+            &&
+            (
+                IsBlank(Cultivo1.Selected.Value) ||
+                Crop = Cultivo1.Selected.Value
+            )
+            &&
+            (
+                ddFiltroStatus.Selected.Value = "Todos" ||
+                Status.Value = ddFiltroStatus.Selected.Value
+            )
+        );
+        "StatusTexto"; Status.Value;
+        "CosechaTexto"; Cosecha.Value;
+        "FechaTexto"; Text(Fecha; "dd/mm/yyyy hh:mm");
+        "PorcentajeTexto"; Text(
+            If(
+                Value('Target Seed Amount') > 0;
+                (Value('Produced Amount') /
+                 Value('Target Seed Amount')) * 100;
+                0
+            );
+            "0.00"
+        ) & "%"
+    )
+);;
+
+Set(
+    varResultadoDescarga;
+    FlujoDescargarExcel.Run(
+        JSON(colExportar; JSONFormat.IndentFour)
+    )
+);;
+
+Download(varResultadoDescarga.enlacearchivo)
+
+══════════ FIN DEL CÓDIGO ══════════
+
+NOTAS SOBRE EL CÓDIGO:
+- ;; (doble punto y coma) separa las 3 instrucciones
+  (ClearCollect, Set, Download)
+- ; (simple) separa parámetros dentro de funciones
+- Reemplazar "FlujoDescargarExcel" con el nombre exacto
+  que Power Apps le asignó al conectar el flujo
+- Si algún control no existe en tu app (ej: ddFiltroStatus),
+  elimina esa parte del Filter
+
+
+================================================================
+ RESUMEN DE CAMBIOS A HACER AHORA
+================================================================
+
+FLUJO DE CARGA:
+1. Limpiar TODOS los datos de DBPLANIFICACION
+2. ELIMINAR "Actualizar elemento" → recrear desde UI
+   usando Contenido dinámico (no fx) para cada campo
+3. ELIMINAR "Crear elemento" → recrear desde UI
+   usando Contenido dinámico (no fx) para cada campo
+4. ELIMINAR el "For each" del final
+5. Agregar "Mover archivo" como acción independiente
+
+FLUJO DE DESCARGA:
+1. D1 y D2 ya los tienes
+2. Agregar D3: Crear tabla CSV
+3. Agregar D4: Componer (opcional, solo si quieres base64)
+4. Agregar D5: Crear archivo → /DBSPA/Export → .xlsx
+5. Agregar D6: Responder con enlacearchivo
+6. Crear carpeta /DBSPA/Export en SharePoint
+7. Conectar flujo a Power Apps
+8. Pegar código en Icon3 OnSelect
