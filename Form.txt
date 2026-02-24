@@ -1,0 +1,559 @@
+================================================================
+ FLUJO 1: FlujoDescargarExcel (EXISTENTE - DBPLANIFICACION)
+ Pantalla: Procesos → Icon3
+================================================================
+
+
+--- PASO 1: TRIGGER ---
+"Cuando Power Apps llame a un flujo (V2)"
+
+  Entrada 1:
+    Tipo: Texto
+    Nombre: jsonDatos
+
+  Entrada 2:
+    Tipo: Texto
+    Nombre: nombreArchivo
+
+
+--- PASO 2: ANÁLISIS DEL ARCHIVO JSON ---
+Acción: Operaciones de datos → Análisis del archivo JSON
+
+  Contenido (clic en fx → Expresión):
+    json(triggerBody()['text'])
+
+  Esquema (copiar y pegar completo):
+
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "SRCPlotBID": {"type": "string"},
+      "HarvestInvBID": {"type": "string"},
+      "Crop": {"type": "string"},
+      "Set": {"type": "string"},
+      "Field": {"type": "string"},
+      "Plot": {"type": "string"},
+      "SubRow": {"type": "string"},
+      "Gen": {"type": "string"},
+      "TargetSeedAmount": {"type": "string"},
+      "NextCyclePriority": {"type": "string"},
+      "Greenhouse": {"type": "string"},
+      "ProducedAmount": {"type": "string"},
+      "StatusTexto": {"type": "string"},
+      "PorcentajeTexto": {"type": "string"},
+      "Comments": {"type": "string"},
+      "CosechaTexto": {"type": "string"},
+      "FechaTexto": {"type": "string"}
+    }
+  }
+}
+
+
+--- PASO 3: CREAR TABLA CSV ---
+Acción: Operaciones de datos → Crear tabla CSV
+
+  De (Desde): body('Analisis_del_archivo_JSON')
+     (Contenido dinámico → buscar "Análisis del archivo JSON"
+      → seleccionar "Cuerpo" o "Body")
+
+  Columnas: Personalizadas (cambiar de Automáticas a Personalizadas)
+
+  Para cada fila: clic en el campo Valor → clic en fx (Expresión)
+  → escribir la expresión → clic en Aceptar.
+
+  Fila 1:
+    Encabezado: SRC Plot BID
+    Valor (fx): item()?['SRCPlotBID']
+
+  Fila 2:
+    Encabezado: Harvest Inv BID
+    Valor (fx): item()?['HarvestInvBID']
+
+  Fila 3:
+    Encabezado: Crop
+    Valor (fx): item()?['Crop']
+
+  Fila 4:
+    Encabezado: Set
+    Valor (fx): item()?['Set']
+
+  Fila 5:
+    Encabezado: Field
+    Valor (fx): item()?['Field']
+
+  Fila 6:
+    Encabezado: Plot#
+    Valor (fx): item()?['Plot']
+
+  Fila 7:
+    Encabezado: Sub-Row
+    Valor (fx): item()?['SubRow']
+
+  Fila 8:
+    Encabezado: Gen
+    Valor (fx): item()?['Gen']
+
+  Fila 9:
+    Encabezado: Target Seed Amount
+    Valor (fx): item()?['TargetSeedAmount']
+
+  Fila 10:
+    Encabezado: Next Cycle Priority
+    Valor (fx): item()?['NextCyclePriority']
+
+  Fila 11:
+    Encabezado: Greenhouse
+    Valor (fx): item()?['Greenhouse']
+
+  Fila 12:
+    Encabezado: Produced Amount
+    Valor (fx): item()?['ProducedAmount']
+
+  Fila 13:
+    Encabezado: Status
+    Valor (fx): item()?['StatusTexto']
+
+  Fila 14:
+    Encabezado: Percentage
+    Valor (fx): item()?['PorcentajeTexto']
+
+  Fila 15:
+    Encabezado: Comments
+    Valor (fx): item()?['Comments']
+
+  Fila 16:
+    Encabezado: Cosecha
+    Valor (fx): item()?['CosechaTexto']
+
+  Fila 17:
+    Encabezado: Fecha
+    Valor (fx): item()?['FechaTexto']
+
+
+--- PASO 4: CREAR ARCHIVO ---
+Acción: SharePoint → Crear archivo
+
+  Dirección del sitio: TOMATE_CICLO_LARGO
+     (seleccionar del desplegable)
+
+  Ruta de la carpeta: /DBSPA/Export
+     (clic en el icono de carpeta y navegar)
+
+  Nombre del archivo: nombreArchivo
+     (Contenido dinámico → buscar en el trigger → nombreArchivo)
+     Si no aparece, usar fx: triggerBody()['text_1']
+
+  Contenido del archivo: Resultado
+     (Contenido dinámico → buscar "Crear tabla CSV" → Resultado)
+     Si no aparece, usar fx: body('Crear_tabla_CSV')
+
+
+--- PASO 5: GUARDAR ---
+Clic en "Guardar" arriba a la derecha.
+
+NO debe haber acción "Redactar" ni "Responder a PowerApps".
+Si todavía existen, eliminarlas (3 puntos → Eliminar).
+
+FLUJO FINAL (4 pasos):
+  Trigger → Análisis JSON → Crear tabla CSV → Crear archivo
+
+
+================================================================
+ POWER APPS — Icon3.OnSelect (Pantalla Procesos)
+================================================================
+
+Antes de pegar el código:
+1. Seleccionar Icon3
+2. Acción → Power Automate
+3. Si tiene un flujo, 3 puntos → Quitar
+4. + Agregar flujo → seleccionar FlujoDescargarExcel
+5. Anotar el nombre exacto
+
+Reemplazar TODO el OnSelect de Icon3 con:
+
+ClearCollect(
+    colExportar;
+    ForAll(
+        Filter(
+            DBPLANIFICACION;
+            (
+                IsBlank(txtBuscador.Value) ||
+                StartsWith('SRC Plot BID'; txtBuscador.Value) ||
+                StartsWith('Harvest Inv BID'; txtBuscador.Value) ||
+                StartsWith(Crop; txtBuscador.Value) ||
+                StartsWith(Field; txtBuscador.Value) ||
+                StartsWith(Set; txtBuscador.Value) ||
+                StartsWith(Greenhouse; txtBuscador.Value) ||
+                StartsWith('Plot#'; txtBuscador.Value)
+            )
+            &&
+            (
+                IsBlank(Familia1.Selected.Value) ||
+                Familia1.Selected.Value = "All" ||
+                (Familia1.Selected.Value = "Solanaceae" &&
+                 (Crop = "Tomato" || Crop = "Pepper")) ||
+                (Familia1.Selected.Value = "Cucurbits" &&
+                 (Crop = "Melon" || Crop = "Watermelon" ||
+                  Crop = "Cucumber"))
+            )
+            &&
+            (
+                IsBlank(Cultivo1.Selected.Value) ||
+                Crop = Cultivo1.Selected.Value
+            )
+            &&
+            (
+                ddFiltroStatus.Selected.Value = "Todos" ||
+                Status.Value = ddFiltroStatus.Selected.Value
+            )
+        );
+        {
+            SRCPlotBID: ThisRecord.'SRC Plot BID';
+            HarvestInvBID: ThisRecord.'Harvest Inv BID';
+            Crop: ThisRecord.Crop;
+            Set: ThisRecord.Set;
+            Field: ThisRecord.Field;
+            Plot: ThisRecord.'Plot#';
+            SubRow: ThisRecord.'Sub-Row';
+            Gen: ThisRecord.Gen;
+            TargetSeedAmount: Text(ThisRecord.'Target Seed Amount');
+            NextCyclePriority: ThisRecord.'Next Cycle Priority';
+            Greenhouse: ThisRecord.Greenhouse;
+            ProducedAmount: Text(ThisRecord.'Produced Amount');
+            StatusTexto: If(IsBlank(ThisRecord.Status.Value); ""; ThisRecord.Status.Value);
+            PorcentajeTexto: Text(ThisRecord.Percentage) & "%";
+            Comments: If(IsBlank(ThisRecord.Comments); ""; ThisRecord.Comments);
+            CosechaTexto: If(IsBlank(ThisRecord.Cosecha.Value); ""; ThisRecord.Cosecha.Value);
+            FechaTexto: If(IsBlank(ThisRecord.Fecha); ""; Text(ThisRecord.Fecha; "dd/mm/yyyy hh:mm"))
+        }
+    )
+);;
+
+Set(
+    varNombreExport;
+    "Plan_" & Text(Now(); "yyyymmdd_hhmmss") & "_" & Left(User().Email; Find("@"; User().Email) - 1) & ".csv"
+);;
+
+FlujoDescargarExcel.Run(
+    JSON(colExportar; JSONFormat.IndentFour);
+    varNombreExport
+);;
+
+Launch(
+    "https://intecapedu.sharepoint.com/sites/TOMATE/DBSPA/Export/" & varNombreExport
+)
+
+
+================================================================
+================================================================
+ FLUJO 2: FlujoCosechaCSV (NUEVO - DB_COSECHA)
+ Pantalla: SPA → Icon4
+================================================================
+================================================================
+
+CREAR FLUJO NUEVO:
+  Power Automate → + Crear → Flujo de nube instantáneo
+  Nombre: FlujoCosechaCSV
+  Trigger: Cuando Power Apps llame a un flujo (V2)
+
+
+--- PASO 1: TRIGGER ---
+"Cuando Power Apps llame a un flujo (V2)"
+
+  Clic en "+ Agregar una entrada" → Texto
+    Nombre: jsonDatos
+
+  Clic en "+ Agregar una entrada" → Texto
+    Nombre: nombreArchivo
+
+
+--- PASO 2: ANÁLISIS DEL ARCHIVO JSON ---
+Clic en "+ Nuevo paso"
+Buscar: "Análisis del archivo JSON" (Parse JSON)
+
+  Contenido (clic en fx → Expresión):
+    json(triggerBody()['text'])
+
+  Esquema (copiar y pegar completo):
+
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "SRCPlotBID": {"type": "string"},
+      "HarvestInvBID": {"type": "string"},
+      "Crop": {"type": "string"},
+      "StatusTexto": {"type": "string"},
+      "Field": {"type": "string"},
+      "Set": {"type": "string"},
+      "Plot": {"type": "string"},
+      "SubRow": {"type": "string"},
+      "Gen": {"type": "string"},
+      "TargetSeedAmount": {"type": "string"},
+      "NextCyclePriority": {"type": "string"},
+      "Weight": {"type": "string"},
+      "Comment": {"type": "string"},
+      "Season": {"type": "string"},
+      "Greenhouse": {"type": "string"},
+      "Usuario": {"type": "string"},
+      "ProcesosTexto": {"type": "string"},
+      "MatchTexto": {"type": "string"},
+      "UsuarioMatch": {"type": "string"},
+      "DPesoTexto": {"type": "string"},
+      "UsuarioPeso": {"type": "string"},
+      "CosechaTexto": {"type": "string"},
+      "Pesoxcosecha": {"type": "string"}
+    }
+  }
+}
+
+
+--- PASO 3: CREAR TABLA CSV ---
+Clic en "+ Nuevo paso"
+Buscar: "Crear tabla CSV"
+
+  De (Desde): body('Analisis_del_archivo_JSON')
+     (Contenido dinámico → buscar "Análisis del archivo JSON"
+      → seleccionar "Cuerpo" o "Body")
+
+  Columnas: Personalizadas (cambiar de Automáticas a Personalizadas)
+
+  Para cada fila: clic en el campo Valor → clic en fx (Expresión)
+  → escribir la expresión → clic en Aceptar.
+
+  Fila 1:
+    Encabezado: SRC Plot BID
+    Valor (fx): item()?['SRCPlotBID']
+
+  Fila 2:
+    Encabezado: Harvest Inv BID
+    Valor (fx): item()?['HarvestInvBID']
+
+  Fila 3:
+    Encabezado: Crop
+    Valor (fx): item()?['Crop']
+
+  Fila 4:
+    Encabezado: Status
+    Valor (fx): item()?['StatusTexto']
+
+  Fila 5:
+    Encabezado: Field
+    Valor (fx): item()?['Field']
+
+  Fila 6:
+    Encabezado: Set
+    Valor (fx): item()?['Set']
+
+  Fila 7:
+    Encabezado: Plot#
+    Valor (fx): item()?['Plot']
+
+  Fila 8:
+    Encabezado: Sub-Row
+    Valor (fx): item()?['SubRow']
+
+  Fila 9:
+    Encabezado: Gen
+    Valor (fx): item()?['Gen']
+
+  Fila 10:
+    Encabezado: Target Seed Amount
+    Valor (fx): item()?['TargetSeedAmount']
+
+  Fila 11:
+    Encabezado: Next Cycle Priority
+    Valor (fx): item()?['NextCyclePriority']
+
+  Fila 12:
+    Encabezado: Weight
+    Valor (fx): item()?['Weight']
+
+  Fila 13:
+    Encabezado: Comment
+    Valor (fx): item()?['Comment']
+
+  Fila 14:
+    Encabezado: Season
+    Valor (fx): item()?['Season']
+
+  Fila 15:
+    Encabezado: Greenhouse
+    Valor (fx): item()?['Greenhouse']
+
+  Fila 16:
+    Encabezado: Usuario
+    Valor (fx): item()?['Usuario']
+
+  Fila 17:
+    Encabezado: Procesos
+    Valor (fx): item()?['ProcesosTexto']
+
+  Fila 18:
+    Encabezado: Match
+    Valor (fx): item()?['MatchTexto']
+
+  Fila 19:
+    Encabezado: UsuarioMatch
+    Valor (fx): item()?['UsuarioMatch']
+
+  Fila 20:
+    Encabezado: Fecha Peso
+    Valor (fx): item()?['DPesoTexto']
+
+  Fila 21:
+    Encabezado: UsuarioPeso
+    Valor (fx): item()?['UsuarioPeso']
+
+  Fila 22:
+    Encabezado: Cosecha
+    Valor (fx): item()?['CosechaTexto']
+
+  Fila 23:
+    Encabezado: Pesoxcosecha
+    Valor (fx): item()?['Pesoxcosecha']
+
+
+--- PASO 4: CREAR ARCHIVO ---
+Clic en "+ Nuevo paso"
+Buscar: "Crear archivo" (SharePoint)
+
+  Dirección del sitio: TOMATE_CICLO_LARGO
+     (seleccionar del desplegable)
+
+  Ruta de la carpeta: /DBSPA/Export
+     (clic en el icono de carpeta y navegar)
+
+  Nombre del archivo: nombreArchivo
+     (Contenido dinámico → buscar en el trigger → nombreArchivo)
+     Si no aparece, usar fx: triggerBody()['text_1']
+
+  Contenido del archivo: Resultado
+     (Contenido dinámico → buscar "Crear tabla CSV" → Resultado)
+     Si no aparece, usar fx: body('Crear_tabla_CSV')
+
+
+--- PASO 5: GUARDAR ---
+Clic en "Guardar" arriba a la derecha.
+
+FLUJO FINAL (4 pasos):
+  Trigger → Análisis JSON → Crear tabla CSV → Crear archivo
+
+
+================================================================
+ POWER APPS — Icon4.OnSelect (Pantalla SPA)
+================================================================
+
+Antes de pegar el código:
+1. Seleccionar Icon4 en la pantalla SPA
+2. Acción → Power Automate
+3. + Agregar flujo → seleccionar FlujoCosechaCSV
+4. Anotar el nombre exacto
+
+Reemplazar TODO el OnSelect de Icon4 con:
+
+ClearCollect(
+    colExportCosecha;
+    ForAll(
+        Filter(
+            DB_COSECHA;
+            (
+                IsBlank(txt_IDSobres.Value) ||
+                StartsWith('SRC Plot BID'; txt_IDSobres.Value) ||
+                StartsWith('Harvest Inv BID'; txt_IDSobres.Value) ||
+                StartsWith(Crop; txt_IDSobres.Value) ||
+                StartsWith(Field; txt_IDSobres.Value) ||
+                StartsWith(Set; txt_IDSobres.Value) ||
+                StartsWith(Greenhouse; txt_IDSobres.Value)
+            )
+            &&
+            (
+                IsBlank(Familia.Selected.Value) ||
+                Familia.Selected.Value = "All" ||
+                (Familia.Selected.Value = "Solanaceae" &&
+                 (Crop = "Tomato" || Crop = "Pepper")) ||
+                (Familia.Selected.Value = "Cucurbits" &&
+                 (Crop = "Melon" || Crop = "Watermelon" ||
+                  Crop = "Cucumber"))
+            )
+            &&
+            (
+                IsBlank(Cultivo.Selected.Value) ||
+                Crop = Cultivo.Selected.Value
+            )
+            &&
+            (
+                ddFiltroStatu.Selected.Value = "Todos" ||
+                Status.Value = ddFiltroStatu.Selected.Value
+            )
+        );
+        {
+            SRCPlotBID: ThisRecord.'SRC Plot BID';
+            HarvestInvBID: ThisRecord.'Harvest Inv BID';
+            Crop: ThisRecord.Crop;
+            StatusTexto: If(IsBlank(ThisRecord.Status.Value); ""; ThisRecord.Status.Value);
+            Field: ThisRecord.Field;
+            Set: ThisRecord.Set;
+            Plot: ThisRecord.'Plot#';
+            SubRow: ThisRecord.'Sub-Row';
+            Gen: ThisRecord.Gen;
+            TargetSeedAmount: Text(ThisRecord.'Target Seed Amount');
+            NextCyclePriority: ThisRecord.'Next Cycle Priority';
+            Weight: Text(ThisRecord.Weight);
+            Comment: If(IsBlank(ThisRecord.Comment); ""; ThisRecord.Comment);
+            Season: If(IsBlank(ThisRecord.Season); ""; ThisRecord.Season);
+            Greenhouse: ThisRecord.Greenhouse;
+            Usuario: If(IsBlank(ThisRecord.Usuario); ""; ThisRecord.Usuario);
+            ProcesosTexto: If(IsBlank(ThisRecord.Procesos); ""; Text(ThisRecord.Procesos; "dd/mm/yyyy hh:mm"));
+            MatchTexto: If(IsBlank(ThisRecord.Match); ""; Text(ThisRecord.Match; "dd/mm/yyyy hh:mm"));
+            UsuarioMatch: If(IsBlank(ThisRecord.UsuarioMatch); ""; ThisRecord.UsuarioMatch);
+            DPesoTexto: If(IsBlank(ThisRecord.DPeso); ""; Text(ThisRecord.DPeso; "dd/mm/yyyy hh:mm"));
+            UsuarioPeso: If(IsBlank(ThisRecord.UsuarioPeso); ""; ThisRecord.UsuarioPeso);
+            CosechaTexto: If(IsBlank(ThisRecord.Cosecha.Value); ""; ThisRecord.Cosecha.Value);
+            Pesoxcosecha: Text(ThisRecord.Pesoxcosecha)
+        }
+    )
+);;
+
+Set(
+    varNombreCosecha;
+    "Cosecha_" & Text(Now(); "yyyymmdd_hhmmss") & "_" & Left(User().Email; Find("@"; User().Email) - 1) & ".csv"
+);;
+
+FlujoCosechaCSV.Run(
+    JSON(colExportCosecha; JSONFormat.IndentFour);
+    varNombreCosecha
+);;
+
+Launch(
+    "https://intecapedu.sharepoint.com/sites/TOMATE/DBSPA/Export/" & varNombreCosecha
+)
+
+
+================================================================
+ NOTA SOBRE NOMBRES DE CAMPOS
+================================================================
+
+Si Power Apps muestra subrayado rojo en algún campo, es porque
+el nombre interno es diferente. Escribir ThisRecord. (con punto)
+y verificar el nombre en la lista de autocompletado.
+
+Campos que podrían variar en DB_COSECHA:
+  - Comment → podría ser Comments
+  - 'Sub-Row' → podría ser Sub_x002d_Row
+  - DPeso → podría ser otro nombre
+  - UsuarioPeso → verificar nombre exacto
+  - Pesoxcosecha → verificar nombre exacto
+
+Ajustar según lo que Power Apps muestre.
+
+================================================================
+ NOTA SOBRE NOMBRES DE FLUJOS EN POWER APPS
+================================================================
+
+"FlujoDescargarExcel" y "FlujoCosechaCSV" deben coincidir
+con los nombres EXACTOS que Power Apps asigna al conectar.
+Verificar en el panel izquierdo de Power Automate.
